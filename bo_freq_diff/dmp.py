@@ -5,6 +5,7 @@ class DMP(diff_match_patch):
     def __init__(self):
         super().__init__()
         self.word_sep = ' '  # custom defined word separator
+        self.Diff_Timeout = 0  # allow DMP to take as much time as is needed to calculate the diff
 
     def diff_wordMode(self, text1, text2):
         """

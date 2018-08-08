@@ -23,11 +23,11 @@ class SyllableDiff:
                 if diff:
                     formatted.append(diff)
                     diff = {}
-                formatted.append(text)
+                formatted.extend(text.split(' '))
             elif op == -1:
-                diff['-'] = text
+                diff['-'] = text.replace(' ', '')
             elif op == 1:
-                diff['+'] = text
+                diff['+'] = text.replace(' ', '')
 
         if diff:
             formatted.append(diff)

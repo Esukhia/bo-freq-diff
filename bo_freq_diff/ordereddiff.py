@@ -1,6 +1,7 @@
 from .syllablediff import SyllableDiff
 from collections import defaultdict
 import csv
+from pathlib import Path
 
 
 class OrderedDiff:
@@ -14,7 +15,11 @@ class OrderedDiff:
     def group_type(self):
         for i, diff in enumerate(self.diffs):
             if type(diff) == dict:
-                signature = f'-{str(diff["-"])}+{str(diff["+"])}'
+                signature = ''
+                if '-' in diff:
+                    signature += '-' + diff['-']
+                if '+' in diff:
+                    signature += '+' + diff['+']
                 self.types[signature].append(i)
 
     def group_frequency(self):
@@ -24,15 +29,21 @@ class OrderedDiff:
     def export_diffs(self, order='freq', reverse=True, left=5, right=5, split_context=True):
         out = []  # rows of tuples each containing 4 elements: (title, left, orig, new, left)
         if order == 'freq':
-            ordered = sorted([(k, v) for k, v in self.freqs.items()], reverse=reverse)
+            ordered = sorted([(k, v) for k, v in self.freqs.items()], key=lambda x: x[1], reverse=reverse)
             if split_context:
+                # add csv header
                 l_context = sorted([f'L{str(i)}' for i in range(1, left + 1)], reverse=True)
                 r_context = [f'R{str(i)}' for i in range(1, right + 1)]
-                out.append([''] + l_context + ['A', 'B'] + r_context)
+                out.append(['Freq/Type'] + l_context + ['A', 'B'] + r_context)
+
+                # add content
                 for key, freq in ordered:
                     out += self.split_context_export(key, freq, left, right)
             else:
-                out.append(['title', 'L', 'A', 'B', 'R'])
+                # add csv header
+                out.append(['Freq/Type', 'L', 'A', 'B', 'R'])
+
+                # add content
                 for key, freq in ordered:
                     out += self.joined_context_export(key, freq, left, right)
 
@@ -69,17 +80,19 @@ class OrderedDiff:
             out.append(('', l, orig, new, r))
         return out
 
-    def write_to_csv(self, filename, rows):
-        with open(filename, 'w', encoding='utf-8-sig') as csvfile:
-            writer = csv.writer(csvfile)
-            for row in rows:
-                writer.writerow(row)
+    @staticmethod
+    def write_to_csv(rows, filename=Path('test.csv')):
+        out = '\n'.join([','.join(row) for row in rows])
+        filename.write_text(out, encoding='utf-8-sig')
 
     def gen_context(self, occ, l_context, r_context):
         def choose_variant(context, variant='+'):
             for i in range(len(context)):
                 if type(context[i]) == dict:
-                    context[i] = context[i][variant]
+                    if variant in context[i]:
+                        context[i] = context[i][variant]
+                    else:
+                        context[i] = context[i][list(context[i].keys())[0]]
             return context
 
         # adjust contexts
@@ -94,6 +107,10 @@ class OrderedDiff:
         right = self.diffs[occ+1:occ+r_context]
         right = choose_variant(right)
 
-        orig, new = self.diffs[occ]['-'], self.diffs[occ]['+']
+        orig, new = '', ''
+        if '-' in self.diffs[occ]:
+            orig = self.diffs[occ]['-']
+        if '+' in self.diffs[occ]:
+            new = self.diffs[occ]['+']
 
         return left, orig, new, right
