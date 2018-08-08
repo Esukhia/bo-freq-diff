@@ -21,26 +21,57 @@ class OrderedDiff:
         for k, v in self.types.items():
             self.freqs[k] = len(v)
 
-    def export_diffs(self, order='freq', reverse=True, left=5, right=5):
+    def export_diffs(self, order='freq', reverse=True, left=5, right=5, split_context=True):
         out = []  # rows of tuples each containing 4 elements: (title, left, orig, new, left)
         if order == 'freq':
             ordered = sorted([(k, v) for k, v in self.freqs.items()], reverse=reverse)
-            for key, freq in ordered:
-                # add the header for the current type
-                out.append((f'{str(freq)}: {key}', '', '', '', ''))
-                # add all the instances
-                for occ in self.types[key]:
-                    l, orig, new, r = self.gen_context(occ, left, right)
-                    out.append(('', l, orig, new, r))
+            if split_context:
+                l_context = sorted([f'L{str(i)}' for i in range(1, left + 1)], reverse=True)
+                r_context = [f'R{str(i)}' for i in range(1, right + 1)]
+                out.append([''] + l_context + ['A', 'B'] + r_context)
+                for key, freq in ordered:
+                    out += self.split_context_export(key, freq, left, right)
+            else:
+                out.append(['title', 'L', 'A', 'B', 'R'])
+                for key, freq in ordered:
+                    out += self.joined_context_export(key, freq, left, right)
+
         elif order == 'alpha':
             print('not implemented yet')
         return out
 
+    def split_context_export(self, key, freq, left, right):
+        out = []
+        # add the header to the current type
+        header = [f'{str(freq)}: {key}'] + [''] * left + ['', ''] + [''] * right
+        out.append(header)
+
+        # add all the instances
+        for occ in self.types[key]:
+            l, orig, new, r = self.gen_context(occ, left, right)
+            while len(l) < left:
+                l = [''] + l
+            while len(r) < right:
+                r = r + ['']
+            out.append([''] + l + [orig, new] + r)
+        return out
+
+    def joined_context_export(self, key, freq, left, right):
+        out = []
+        # add the header for the current type
+        header = (f'{str(freq)}: {key}', '', '', '', '')
+        out.append(header)
+        # add all the instances
+        for occ in self.types[key]:
+            l, orig, new, r = self.gen_context(occ, left, right)
+            l = ''.join(l)
+            r = ''.join(r)
+            out.append(('', l, orig, new, r))
+        return out
+
     def write_to_csv(self, filename, rows):
-        header = ('title', 'left', 'original', 'new', 'left')
         with open(filename, 'w', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(header)
             for row in rows:
                 writer.writerow(row)
 
@@ -59,11 +90,9 @@ class OrderedDiff:
 
         left = self.diffs[occ-l_context:occ]
         left = choose_variant(left)
-        left = ''.join(left)
 
         right = self.diffs[occ+1:occ+r_context]
         right = choose_variant(right)
-        right = ''.join(right)
 
         orig, new = self.diffs[occ]['-'], self.diffs[occ]['+']
 
