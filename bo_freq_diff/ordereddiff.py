@@ -1,6 +1,5 @@
 from .syllablediff import SyllableDiff
 from collections import defaultdict
-import csv
 from pathlib import Path
 
 
