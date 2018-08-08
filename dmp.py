@@ -20,34 +20,35 @@ class DMP(diff_match_patch):
         """
         a copy of diff_linesToChars that redefines the linebreak character
         to self.word_sep
+        note: all names containing "line" have been renamed to "word"
         """
-        lineArray = []
-        lineHash = {}
+        wordArray = []
+        wordHash = {}
 
-        lineArray.append('')
+        wordArray.append('')
 
-        def diff_linesToCharsMunge(text):
+        def diff_wordsToCharsMunge(text):
             chars = []
-            lineStart = 0
-            lineEnd = -1
-            while lineEnd < len(text) - 1:
-                lineEnd = text.find(self.word_sep, lineStart)
-                if lineEnd == -1:
-                    lineEnd = len(text) - 1
-                line = text[lineStart:lineEnd + 1]
-                lineStart = lineEnd + 1
+            wordStart = 0
+            wordEnd = -1
+            while wordEnd < len(text) - 1:
+                wordEnd = text.find(self.word_sep, wordStart)
+                if wordEnd == -1:
+                    wordEnd = len(text) - 1
+                word = text[wordStart:wordEnd + 1]
+                wordStart = wordEnd + 1
 
-                if line in lineHash:
-                    chars.append(chr(lineHash[line]))
+                if word in wordHash:
+                    chars.append(chr(wordHash[word]))
                 else:
-                    lineArray.append(line)
-                    lineHash[line] = len(lineArray) - 1
-                    chars.append(chr(len(lineArray) - 1))
+                    wordArray.append(word)
+                    wordHash[word] = len(wordArray) - 1
+                    chars.append(chr(len(wordArray) - 1))
             return "".join(chars)
 
-        chars1 = diff_linesToCharsMunge(text1)
-        chars2 = diff_linesToCharsMunge(text2)
-        return chars1, chars2, lineArray
+        chars1 = diff_wordsToCharsMunge(text1)
+        chars2 = diff_wordsToCharsMunge(text2)
+        return chars1, chars2, wordArray
 
 
 if __name__ == '__main__':
