@@ -20,7 +20,7 @@ class DMP(diff_match_patch):
         """
         a copy of diff_linesToChars that redefines the linebreak character
         to self.word_sep
-        note: all names containing "line" have been renamed to "word"
+        note: all "line"s have been renamed to "word"s
         """
         wordArray = []
         wordHash = {}
