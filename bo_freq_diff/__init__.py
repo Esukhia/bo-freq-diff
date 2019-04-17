@@ -1,6 +1,7 @@
 from .dmp import DMP
-from .syllablediff import SyllableDiff
+from .segmentdiff import SegmentDiff
 from .ordereddiff import OrderedDiff
+from .sentenceordereddiff import SentenceOrderedDiff
 from pathlib import Path
 
 

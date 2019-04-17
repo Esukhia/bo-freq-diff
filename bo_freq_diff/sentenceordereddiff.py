@@ -1,29 +1,25 @@
-from .segmentdiff import SegmentDiff
 from collections import defaultdict
 from pathlib import Path
 
 
-def syllabify(str1, str2):
-    return SegmentDiff().diff(str1, str2)
-
-
-class OrderedDiff:
-    def __init__(self, text1, text2, segment=syllabify):
-        self.diffs = segment(text1, text2)
+class SentenceOrderedDiff:
+    def __init__(self, sents):
+        self.sents = sents
         self.types = defaultdict(list)
         self.freqs = {}
         self.group_type()
         self.group_frequency()
 
     def group_type(self):
-        for i, diff in enumerate(self.diffs):
-            if type(diff) == dict:
-                signature = ''
-                if '-' in diff:
-                    signature += '-' + diff['-']
-                if '+' in diff:
-                    signature += '+' + diff['+']
-                self.types[signature].append(i)
+        for i, sent in enumerate(self.sents):
+            for j, word in enumerate(sent):
+                if type(word) == dict:
+                    signature = ''
+                    if '-' in word:
+                        signature += '-' + word['-']
+                    if '+' in word:
+                        signature += '+' + word['+']
+                    self.types[signature].append((i, j))
 
     def group_frequency(self):
         for k, v in self.types.items():
@@ -48,7 +44,7 @@ class OrderedDiff:
 
                 # add content
                 for key, freq in ordered:
-                    out += self.joined_context_export(key, freq, left, right)
+                    out += self.joined_context_export(key, freq)
 
         elif order == 'alpha':
             print('not implemented yet')
@@ -61,8 +57,8 @@ class OrderedDiff:
         out.append(header)
 
         # add all the instances
-        for occ in self.types[key]:
-            l, orig, new, r = self.gen_context(occ, left, right)
+        for sent, occ in self.types[key]:
+            l, orig, new, r = self.gen_context(sent, occ, left, right)
             while len(l) < left:
                 l = [''] + l
             while len(r) < right:
@@ -70,14 +66,14 @@ class OrderedDiff:
             out.append([''] + l + [orig, new] + r)
         return out
 
-    def joined_context_export(self, key, freq, left, right):
+    def joined_context_export(self, key, freq):
         out = []
         # add the header for the current type
         header = (f'{str(freq)}: {key}', '', '', '', '')
         out.append(header)
         # add all the instances
-        for occ in self.types[key]:
-            l, orig, new, r = self.gen_context(occ, left, right)
+        for sent, occ in self.types[key]:
+            l, orig, new, r = self.gen_context(sent, occ, occ, len(self.sents[sent]) - occ)
             l = ''.join(l)
             r = ''.join(r)
             out.append(('', l, orig, new, r))
@@ -88,7 +84,7 @@ class OrderedDiff:
         out = '\n'.join([','.join(row) for row in rows])
         filename.write_text(out, encoding='utf-8-sig')
 
-    def gen_context(self, occ, l_context, r_context):
+    def gen_context(self, sent, occ, l_context, r_context):
         def choose_variant(context, variant='+'):
             for i in range(len(context)):
                 if type(context[i]) == dict:
@@ -101,19 +97,19 @@ class OrderedDiff:
         # adjust contexts
         while occ - l_context < 0:
             l_context -= 1
-        while occ + r_context > len(self.diffs):
+        while occ + r_context > len(self.sents[sent]):
             r_context -= 1
 
-        left = self.diffs[occ-l_context:occ]
+        left = self.sents[sent][occ-l_context:occ]
         left = choose_variant(left)
 
-        right = self.diffs[occ+1:occ+r_context]
+        right = self.sents[sent][occ+1:occ+r_context]
         right = choose_variant(right)
 
         orig, new = '', ''
-        if '-' in self.diffs[occ]:
-            orig = self.diffs[occ]['-']
-        if '+' in self.diffs[occ]:
-            new = self.diffs[occ]['+']
+        if '-' in self.sents[sent][occ]:
+            orig = self.sents[sent][occ]['-']
+        if '+' in self.sents[sent][occ]:
+            new = self.sents[sent][occ]['+']
 
         return left, orig, new, right
