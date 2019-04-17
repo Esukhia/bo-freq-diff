@@ -1,4 +1,7 @@
 from pathlib import Path
+import time
+import datetime
+
 
 from bo_freq_diff import SegmentDiff, SentenceOrderedDiff
 from pybo import BoTokenizer, Token
@@ -93,32 +96,37 @@ def prepare_dataset(filename1, filename2, outdir):
     orig = filename1.read_text(encoding='utf-8-sig')
     corr = filename2.read_text(encoding='utf-8-sig')
 
+    print('CM diffs')
     sd = SegmentDiff()
     diffs = sd.diff(orig, corr, mode='CM')
     diffs = [a if a else ' ' for a in diffs]  # get back the spaces that are empty strings
     joined = ''.join(diffs)
 
+    print('tokenize')
     tokens = tok.tokenize(joined)
     tokens = join_diffs(tokens)
+    print('sentencify')
     sentences = sentencify(tokens)
     sentences = [[s.content for s in sent] for l, sent in sentences]  # extract strings from sentence tokens
 
+    print('pair sentences')
     # sentence_pairs = [gen_sent_pair(sent) for sent in sentences]
     sentence_pairs = []
     for num, sent in enumerate(sentences):
         sentence_pairs.append(gen_sent_pair(sent))
 
+    print('gen diffs')
     sentence_pairs = [(a.replace(' ', '_'), b.replace(' ', '_')) for a, b in sentence_pairs]
     # ds = SegmentDiff(space_sep_tokens)
     diffs = [sd.diff(t1, t2) for t1, t2 in sentence_pairs]
     diffs = [get_spaces_back(d) for d in diffs]
 
     sod = SentenceOrderedDiff(diffs)
-    print('ok')
     split_out = sod.export_diffs()
     joined_out = sod.export_diffs(split_context=False)
     sod.write_to_csv(split_out, outdir / (filename1.stem + '_split.csv'))
     sod.write_to_csv(joined_out, outdir / (filename1.stem + '_joined.csv'))
+    print('done')
 
 
 if __name__ == '__main__':
@@ -133,4 +141,5 @@ if __name__ == '__main__':
     for o in orig.glob('*.txt'):
         c = corrected / o.name
         if c.is_file():
+            print(o.name, datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
             prepare_dataset(o, c, outdir)
