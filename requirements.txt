@@ -1,2 +1,3 @@
+jsonpickle
 pybo
 diff_match_patch

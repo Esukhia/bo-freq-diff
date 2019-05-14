@@ -165,15 +165,15 @@ if __name__ == '__main__':
     uptime = time.time()
     orig = Path('input/original')
     corrected = Path('input/corrected')
-    outdir = Path('output')
+    outdir = Path('output/error_diffs')
     assert orig.is_dir()
     assert corrected.is_dir()
     assert outdir.is_dir()
 
-    for o in orig.glob('*.txt'):
+    for o in list(orig.glob('*.txt')):
         c = corrected / o.name
         if c.is_file():
-            print(o.name, end=' ')
+            print(o.name, end=' ', flush=True)
             start = time.time()
             prepare_dataset(o, c, outdir)
             end = time.time()
