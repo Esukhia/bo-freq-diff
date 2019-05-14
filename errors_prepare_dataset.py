@@ -123,8 +123,16 @@ def generate_examples(structure, out_dir, maximum):
 
 
 if __name__ == '__main__':
-    in_name = 'output/error_diffs'
-    out_dir = 'output/error_tokens'
+    in_name = Path('output/error_diffs')
+    out_dir = Path('output/error_tokens')
+    if not in_name.is_dir():
+        print('no input')
+    if not out_dir.is_dir():
+        out_dir.mkdir(exist_ok=True)
+
+    for f in out_dir.glob('*.*'):
+        f.unlink()
+
     tokens_per_type_in_report = 20
     tokens_per_type_in_total = 100
     structure = load_diffs(in_name)
