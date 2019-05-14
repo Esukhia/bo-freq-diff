@@ -103,7 +103,7 @@ def is_not_bo(string, bo_non_bo):
 
 def generate_examples(structure, out_dir, maximum):
     for error in structure:
-        if structure[error]['freq'] < maximum:
+        if structure[error]['freq'] < maximum and structure[error]['freq'] > 0:
             maximum = structure[error]['freq']
         vols = structure[error]['tokens']
         exs = 0
