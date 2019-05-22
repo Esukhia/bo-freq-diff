@@ -33,14 +33,14 @@ class SentenceOrderedDiff:
                 # add csv header
                 l_context = sorted([f'L{str(i)}' for i in range(1, left + 1)], reverse=True)
                 r_context = [f'R{str(i)}' for i in range(1, right + 1)]
-                out.append(['Freq/Type'] + l_context + ['A', 'B'] + r_context)
+                out.append(['Freq/Type'] + l_context + ['A', 'B'] + r_context + ['sentence number'])
 
                 # add content
                 for key, freq in ordered:
                     out += self.split_context_export(key, freq, left, right)
             else:
                 # add csv header
-                out.append(['Freq/Type', 'L', 'A', 'B', 'R'])
+                out.append(['Freq/Type', 'L', 'A', 'B', 'R', 'sentence number'])
 
                 # add content
                 for key, freq in ordered:
@@ -63,7 +63,7 @@ class SentenceOrderedDiff:
                 l = [''] + l
             while len(r) < right:
                 r = r + ['']
-            out.append([''] + l + [orig, new] + r)
+            out.append([''] + l + [orig, new] + r + [str(sent)])
         return out
 
     def joined_context_export(self, key, freq):
@@ -76,7 +76,8 @@ class SentenceOrderedDiff:
             l, orig, new, r = self.gen_context(sent, occ, occ, len(self.sents[sent]) - occ)
             l = ''.join(l)
             r = ''.join(r)
-            out.append(('', l, orig, new, r))
+
+            out.append(('', l, orig, new, r, str(sent)))
         return out
 
     @staticmethod
@@ -84,15 +85,17 @@ class SentenceOrderedDiff:
         out = '\n'.join([','.join(row) for row in rows])
         filename.write_text(out, encoding='utf-8-sig')
 
+    @staticmethod
+    def choose_variant(context, variant='+'):
+        for i in range(len(context)):
+            if type(context[i]) == dict:
+                if variant in context[i]:
+                    context[i] = context[i][variant]
+                else:
+                    context[i] = context[i][list(context[i].keys())[0]]
+        return context
+
     def gen_context(self, sent, occ, l_context, r_context):
-        def choose_variant(context, variant='+'):
-            for i in range(len(context)):
-                if type(context[i]) == dict:
-                    if variant in context[i]:
-                        context[i] = context[i][variant]
-                    else:
-                        context[i] = context[i][list(context[i].keys())[0]]
-            return context
 
         # adjust contexts
         while occ - l_context < 0:
@@ -101,10 +104,10 @@ class SentenceOrderedDiff:
             r_context -= 1
 
         left = self.sents[sent][occ-l_context:occ]
-        left = choose_variant(left)
+        left = self.choose_variant(left)
 
         right = self.sents[sent][occ+1:occ+r_context]
-        right = choose_variant(right)
+        right = self.choose_variant(right)
 
         orig, new = '', ''
         if '-' in self.sents[sent][occ]:

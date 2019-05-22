@@ -40,13 +40,17 @@ def gen_sent_pair(sent):
     orig = []
     corr = []
     for word in sent:
-        if word.endswith(' '):
-            space = ' '
-            word = word.strip()
+        if word.endswith('_'):
+            end = '_'
+            word = word.rstrip('_')
         else:
-            space = ''
+            end = ''
 
-        end = ''
+        if word.startswith('_'):
+            start = '_'
+            word = word.lstrip('_')
+        else:
+            start = ''
 
         word = word.replace(rpl_start + rpl_middle + rpl_end, '')
         word = word.replace(del_start + del_end, '')
@@ -54,23 +58,19 @@ def gen_sent_pair(sent):
 
         if word.startswith(rpl_start) and word.endswith(rpl_end) and rpl_middle in word:
             to_del, to_add = word.replace(rpl_start, '').replace(rpl_end, '').split(rpl_middle)
-            orig.append(to_del + space)
-            corr.append(to_add + space)
+            orig.append(start + to_del + end)
+            corr.append(start + to_add + end)
         elif word.startswith(del_start) and word.endswith(del_end):
             to_del = word.replace(del_start, '').replace(del_end, '')
-            orig.append(to_del + space)
+            orig.append(start + to_del + end)
         elif word.startswith(pls_start) and word.endswith(pls_end):
             to_add = word.replace(pls_start, '').replace(pls_end, '')
-            corr.append(to_add + space)
+            corr.append(start + to_add + end)
         elif '~' not in word and '+' not in word and '-' not in word:
-            orig.append(word + space)
-            corr.append(word + space)
+            orig.append(start + word + end)
+            corr.append(start + word + end)
         else:
-            raise SyntaxError(f'{word} is incorrect.')
-
-        if end:
-            orig.append(end)
-            corr.append(end)
+            raise SyntaxError(f'{word} is incorrect.\n{sent}')
 
     return ''.join(orig), ''.join(corr)
 
@@ -78,19 +78,35 @@ def gen_sent_pair(sent):
 def join_diffs(tokens):
     i = 0
     while i < len(tokens):
+        if i == 2258:
+            print()
         cur = tokens[i]
         diff = ''
-        if '{' in cur.content and '}' not in cur.content:
+        if '{' in cur.content and cur.content.count('{') != cur.content.count('}'):
             j = 0
-            while '}' not in cur.content:
+
+            cur = tokens[i + j]
+            diff += cur.content
+            j += 1
+            while diff.count('{') != diff.count('}'):
                 cur = tokens[i + j]
                 diff += cur.content
                 j += 1
-            token = Token()
-            token.content = diff
-            tokens[i: i + j] = [token]
+            new_tokens = []
+            for n in diff.split('}'):
+                new = Token()
+                if n and '{' in n:
+                    new.content = n + '}'
+                else:
+                    new.content = n
+                new_tokens.append(new)
+            tokens[i: i + j] = new_tokens
 
         i += 1
+
+    for num, t in enumerate(tokens):
+        if t.content.count('{') != t.content.count('}'):
+            print(num, t.content)
 
     return tokens
 
@@ -125,13 +141,25 @@ def get_spaces_back(words):
     return words
 
 
+def write_sentences(filename, sentences):
+    out_file = Path('output/sentences') / filename.name
+    if not out_file.parent.is_dir():
+        out_file.parent.mkdir(exist_ok=True)
+    with out_file.open('w', encoding='utf-8-sig') as w:
+        for sent in sentences:
+            if len(sent) == 2:
+                w.write(sent[1] + '\n')
+            else:
+                w.write(sent[0] + '\n')
+
+
 def prepare_dataset(filename1, filename2, outdir):
     orig = filename1.read_text(encoding='utf-8-sig').replace('\n', '').replace('༌', '་')
     orig = clean_non_bo(orig)
-    orig = re.sub(r'\s+', ' ', orig)
+    orig = re.sub(r'\s+', '_', orig)
     corr = filename2.read_text(encoding='utf-8-sig').replace('\n', '').replace('༌', '་')
     corr = clean_non_bo(corr)
-    corr = re.sub(r'\s+', ' ', corr)
+    corr = re.sub(r'\s+', '_', corr)
 
     sd = SegmentDiff()
     diffs = sd.diff(orig, corr, mode='CM')
@@ -150,6 +178,7 @@ def prepare_dataset(filename1, filename2, outdir):
 
     sentence_pairs = [(a.replace(' ', '_'), b.replace(' ', '_')) for a, b in sentence_pairs]
     # ds = SegmentDiff(space_sep_tokens)
+    write_sentences(filename1, sentence_pairs)
     diffs = [sd.diff(t1, t2) for t1, t2 in sentence_pairs]
     diffs = [get_spaces_back(d) for d in diffs]
 
@@ -164,13 +193,20 @@ if __name__ == '__main__':
     # make sure the directories exist
     uptime = time.time()
     orig = Path('input/original')
-    corrected = Path('input/corrected')
+    corrected = Path('../derge-tengyur/text')
     outdir = Path('output/error_diffs')
     assert orig.is_dir()
     assert corrected.is_dir()
     assert outdir.is_dir()
 
-    for o in list(orig.glob('*.txt')):
+    orig_files = [o.stem for o in orig.glob('*.txt')]
+    cor_files = [c.stem for c in corrected.glob('*.txt')]
+    o_only = [o for o in orig_files if o not in cor_files]
+    c_only = [c for c in cor_files if c not in orig_files]
+    print('only in original:', o_only)
+    print('only in corrected:', c_only)
+
+    for o in list(orig.glob('*.txt'))[3:]:
         c = corrected / o.name
         if c.is_file():
             print(o.name, end=' ', flush=True)
@@ -180,3 +216,5 @@ if __name__ == '__main__':
             elapsed = str(datetime.timedelta(seconds=end - uptime))[:7]
             duration = str(datetime.timedelta(seconds=end - start))[:7]
             print(f'{duration} ({elapsed} since start)')
+
+    print()

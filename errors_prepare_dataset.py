@@ -17,7 +17,6 @@ def load_diffs(diff_path):
      }
     """
     structure = {}
-    bo_non_bo = {}
     for f in Path(diff_path).glob('*_joined.csv'):
         vol_name = f.stem[:f.stem.rfind('_')]
         content = f.read_text(encoding='utf-8-sig').split('\n')[1:]
@@ -42,20 +41,17 @@ def load_diffs(diff_path):
             freq, token = group[0].split(':')
             freq, token = int(freq), token.replace(',', '').strip()
 
-            # filter skrt and non-bo types
-            if is_not_bo(token, bo_non_bo):
-                continue
-
             if token not in structure:
-                structure[token] = {'freq': 0, 'tokens': {}, 'order': 0}
+                structure[token] = {'freq': 0, 'tokens': {}, 'order': 0, 'skrt': False, 'sent_num': -1}
 
             structure[token]['freq'] += freq
             if vol_name not in structure[token]['tokens']:
                 structure[token]['tokens'][vol_name] = []
 
             for line in group[1:]:
-                _, left, _, _, right = line.split(',')
+                _, left, _, _, right, sent_number = line.split(',')
                 structure[token]['tokens'][vol_name].append((left, right))
+                structure[token]['sent_num'] = sent_number
 
     for num, token in enumerate(structure):
         structure[token]['order'] = num
@@ -66,6 +62,8 @@ def load_diffs(diff_path):
 def generate_report(structure, ex_per_type):
     report = []
     for token in sorted(structure, key=lambda x: structure[x]['order']):
+        if structure[token]['skrt']:
+            continue
         if structure[token]['freq'] < ex_per_type:
             ex_per_type = structure[token]['freq']
         vols = structure[token]['tokens']
@@ -101,8 +99,25 @@ def is_not_bo(string, bo_non_bo):
     return has_no_bo > 0
 
 
+def mark_skrt(structure):
+    bo_non_bo = {}
+    for n, error in enumerate(structure):
+        parts = error.strip('+-').split('+')
+        for p in parts:
+            if not structure[error]['skrt']:
+                tokens = tok.tokenize(p)
+                for t in tokens:
+                    if not structure[error]['skrt'] and t.skrt or t.type != 'syl':
+                        bo_non_bo[t] = True
+                        structure[error]['skrt'] = True
+
+    return structure
+
+
 def generate_examples(structure, out_dir, maximum):
     for error in structure:
+        if structure[error]['skrt']:
+            continue
         if structure[error]['freq'] < maximum and structure[error]['freq'] > 0:
             maximum = structure[error]['freq']
         vols = structure[error]['tokens']
@@ -136,6 +151,7 @@ if __name__ == '__main__':
     tokens_per_type_in_report = 20
     tokens_per_type_in_total = 100
     structure = load_diffs(in_name)
+    structure = mark_skrt(structure)
     report = generate_report(structure, tokens_per_type_in_report)
     Path('output/report.txt').write_text(report, encoding='utf-8-sig')
     generate_examples(structure, out_dir, tokens_per_type_in_total)
