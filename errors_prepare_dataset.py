@@ -42,7 +42,7 @@ def load_diffs(diff_path):
             freq, token = int(freq), token.replace(',', '').strip()
 
             if token not in structure:
-                structure[token] = {'freq': 0, 'tokens': {}, 'order': 0, 'skrt': False, 'sent_num': -1}
+                structure[token] = {'freq': 0, 'tokens': {}, 'correct_concs': {}, 'order': 0, 'skrt': False}
 
             structure[token]['freq'] += freq
             if vol_name not in structure[token]['tokens']:
@@ -50,13 +50,23 @@ def load_diffs(diff_path):
 
             for line in group[1:]:
                 _, left, _, _, right, sent_number = line.split(',')
-                structure[token]['tokens'][vol_name].append((left, right))
-                structure[token]['sent_num'] = sent_number
+                structure[token]['tokens'][vol_name].append((left, right, sent_number))
 
     for num, token in enumerate(structure):
         structure[token]['order'] = num
 
     return structure
+
+
+def load_sentences():
+    in_path = Path('output/sentences')
+    sentences = {}
+    print('Loading sentences...', end=' ', flush=True)
+    for f in in_path.glob('*.txt'):
+        if f.stem not in sentences:
+            sentences[f.stem] = f.read_text(encoding='utf-8-sig').split('\n')
+    print('done.')
+    return sentences
 
 
 def generate_report(structure, ex_per_type):
@@ -72,8 +82,8 @@ def generate_report(structure, ex_per_type):
         while exs < ex_per_type:
             for vol, tokens in vols.items():
                 if exs < ex_per_type:
-                    left, right = random.choice(tokens)
-                    t = f'{left}*{token}*{right},{vol}\n'
+                    left, right, sent_num = random.choice(tokens)
+                    t = f'{left}*{token}*{right},{vol},{sent_num}\n'
                     error_type += t
                     exs += 1
 
@@ -114,10 +124,30 @@ def mark_skrt(structure):
     return structure
 
 
-def generate_examples(structure, out_dir, maximum):
+def find_correct_concs(sentences, error):
+    output = []
+    for vol, sents in sentences.items():
+        already_found = []
+        if vol in structure[error]['tokens']:
+            already_found = [int(a[2]) for a in structure[error]['tokens'][vol]]
+        for num, sent in enumerate(sents):
+            if num not in already_found:
+                output.append(sent)
+
+    return output
+
+
+def get_context(sentences, sent_num, vol, left, right):
+    sent_num = int(sent_num)
+    return ''.join(sentences[vol][sent_num - left: sent_num]), ''.join(sentences[vol][sent_num + 1: sent_num + right + 1])
+
+
+def generate_examples(structure, error_tokens_dir, correct_concs_dir, maximum, left, right):
+    sentences = load_sentences()
     for error in structure:
-        if structure[error]['skrt']:
+        if structure[error]['skrt'] or error == '-':
             continue
+        print(error)
         if structure[error]['freq'] < maximum and structure[error]['freq'] > 0:
             maximum = structure[error]['freq']
         vols = structure[error]['tokens']
@@ -126,26 +156,59 @@ def generate_examples(structure, out_dir, maximum):
         while exs < maximum:
             for vol, tokens in vols.items():
                 if exs < maximum:
-                    left, right = random.choice(tokens)
+                    left_context, right_context, sent_num = random.choice(tokens)
+                    l_sent, r_sent = get_context(sentences, sent_num, vol, left, right)
+                    left_context = str(l_sent + left_context).replace('_', ' ')
+                    right_context = str(right_context + r_sent).replace('_', ' ')
                     # format example
-                    ex = f'{left}*{error}*{right}'
+                    ex = f'{left_context}*{error}*{right_context}'
 
                     examples.append({'ex': ex})
                     exs += 1
 
         output = str(examples).replace(',', ',\n')
-        Path(Path(out_dir) / (str(structure[error]['order']+1) + error[:20] + '.json')).write_text(output, encoding='utf-8-sig')
+        Path(error_tokens_dir / (str(structure[error]['order'] + 1) + error[:20] + '.json')).write_text(output, encoding='utf-8-sig')
+
+        # correct occurences
+        if '-' in error:
+            if '+' in error:
+                token = error[error.find('-') + 1: error.find('+')]
+            else:
+                token = error[error.find('-') + 1:]
+            exs = 0
+            examples = []
+            while exs < maximum:
+                for vol, sents in sentences.items():
+                    found = []
+                    for num, s in enumerate(sents):
+                        if token in s:
+                            ex = s.replace(token, '*' + token + '*')
+                            left_context = ''.join(sents[num - left: num])
+                            right_context = ''.join(sents[num + 1: num + right + 1])
+                            ex = f'{left_context}{ex}{right_context} {vol}'
+                            found.append(ex)
+                    if exs < maximum:
+                        if found:
+                            examples.append({'ex': random.choice(found)})
+                            exs += 1
+            output = str(examples).replace(',', ',\n')
+            Path(correct_concs_dir / (str(structure[error]['order']+1) + error[:20] + '_correct_sentences.json')).write_text(output, encoding='utf-8-sig')
 
 
 if __name__ == '__main__':
     in_name = Path('output/error_diffs')
-    out_dir = Path('output/error_tokens')
+    error_tokens_dir = Path('output/error_tokens')
+    conc_dir = Path('output/correct_concs')
     if not in_name.is_dir():
         print('no input')
-    if not out_dir.is_dir():
-        out_dir.mkdir(exist_ok=True)
+    if not conc_dir.is_dir():
+        conc_dir.mkdir(exist_ok=True)
+    if not error_tokens_dir.is_dir():
+        error_tokens_dir.mkdir(exist_ok=True)
 
-    for f in out_dir.glob('*.*'):
+    for f in error_tokens_dir.glob('*.*'):
+        f.unlink()
+    for f in conc_dir.glob('*.*'):
         f.unlink()
 
     tokens_per_type_in_report = 20
@@ -154,5 +217,5 @@ if __name__ == '__main__':
     structure = mark_skrt(structure)
     report = generate_report(structure, tokens_per_type_in_report)
     Path('output/report.txt').write_text(report, encoding='utf-8-sig')
-    generate_examples(structure, out_dir, tokens_per_type_in_total)
+    generate_examples(structure, error_tokens_dir, conc_dir, tokens_per_type_in_total, 1, 1)
     print()
