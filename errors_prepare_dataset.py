@@ -142,17 +142,29 @@ def get_context(sentences, sent_num, vol, left, right):
     return ''.join(sentences[vol][sent_num - left: sent_num]), ''.join(sentences[vol][sent_num + 1: sent_num + right + 1])
 
 
-def generate_examples(structure, error_tokens_dir, correct_concs_dir, maximum, left, right):
+def generate_examples(structure, error_tokens_dir, skrt_error_tokens_dir, correct_concs_dir, skrt_correct_concs_dir, maximum, left, right, gen_skrt=False):
     sentences = load_sentences()
     for error in structure:
-        if structure[error]['skrt'] or error == '-':
+        if error == '-':
             continue
+
+        if not gen_skrt and structure[error]['skrt']:
+            continue
+
+        if structure[error]['skrt']:
+            cur_token_dir = skrt_error_tokens_dir
+            cur_conc_dir = skrt_correct_concs_dir
+        else:
+            cur_token_dir = error_tokens_dir
+            cur_conc_dir = correct_concs_dir
+
         print(error)
         if structure[error]['freq'] < maximum and structure[error]['freq'] > 0:
             maximum = structure[error]['freq']
         vols = structure[error]['tokens']
         exs = 0
         examples = []
+        previous_ex = ''
         while exs < maximum:
             for vol, tokens in vols.items():
                 if exs < maximum:
@@ -161,13 +173,15 @@ def generate_examples(structure, error_tokens_dir, correct_concs_dir, maximum, l
                     left_context = str(l_sent + left_context).replace('_', ' ')
                     right_context = str(right_context + r_sent).replace('_', ' ')
                     # format example
-                    ex = f'{left_context}*{error}*{right_context}'
+                    ex = f'{left_context}*{error}*{right_context} {vol}'
+                    if ex != previous_ex:
+                        examples.append({'ex': ex})
+                        previous_ex = ex
 
-                    examples.append({'ex': ex})
                     exs += 1
 
         output = str(examples).replace(',', ',\n')
-        Path(error_tokens_dir / (str(structure[error]['order'] + 1) + error[:20] + '.json')).write_text(output, encoding='utf-8-sig')
+        Path(cur_token_dir / (str(structure[error]['order'] + 1) + error[:20] + '.json')).write_text(output, encoding='utf-8-sig')
 
         # correct occurences
         if '-' in error:
@@ -176,39 +190,60 @@ def generate_examples(structure, error_tokens_dir, correct_concs_dir, maximum, l
             else:
                 token = error[error.find('-') + 1:]
             exs = 0
-            examples = []
-            while exs < maximum:
-                for vol, sents in sentences.items():
-                    found = []
-                    for num, s in enumerate(sents):
+            found = {}
+            for vol, sents in sentences.items():
+                occs = []
+                for num, s in enumerate(sents):
+                    if token in s:
                         if token in s:
                             ex = s.replace(token, '*' + token + '*')
                             left_context = ''.join(sents[num - left: num])
                             right_context = ''.join(sents[num + 1: num + right + 1])
                             ex = f'{left_context}{ex}{right_context} {vol}'
-                            found.append(ex)
-                    if exs < maximum:
-                        if found:
-                            examples.append({'ex': random.choice(found)})
+                            occs.append(ex)
+                if occs:
+                    found[vol] = occs
+
+            if found:
+                examples = []
+                previous_ex = ''
+                while exs < maximum:
+                    for vol, sents in found.items():
+                        if exs < maximum:
+                            ex = random.choice(sents)
+                            if previous_ex != ex:
+                                examples.append({'ex': ex})
+                                previous_ex = ex
                             exs += 1
-            output = str(examples).replace(',', ',\n')
-            Path(correct_concs_dir / (str(structure[error]['order']+1) + error[:20] + '_correct_sentences.json')).write_text(output, encoding='utf-8-sig')
+                output = str(examples).replace(',', ',\n')
+                Path(cur_conc_dir / (str(structure[error]['order']+1) + error[:20] + '_correct_sentences.json')).write_text(output, encoding='utf-8-sig')
 
 
 if __name__ == '__main__':
     in_name = Path('output/error_diffs')
     error_tokens_dir = Path('output/error_tokens')
+    skrt_error_tokens_dir = Path('output/skrt_error_tokens')
     conc_dir = Path('output/correct_concs')
+    skrt_conc_dir = Path('output/skrt_correct_concs')
+
     if not in_name.is_dir():
         print('no input')
     if not conc_dir.is_dir():
         conc_dir.mkdir(exist_ok=True)
+    if not skrt_conc_dir.is_dir():
+        skrt_conc_dir.mkdir(exist_ok=True)
     if not error_tokens_dir.is_dir():
         error_tokens_dir.mkdir(exist_ok=True)
+    if not skrt_error_tokens_dir.is_dir():
+        skrt_error_tokens_dir.mkdir(exist_ok=True)
 
     for f in error_tokens_dir.glob('*.*'):
         f.unlink()
+    for f in skrt_error_tokens_dir.glob('*.*'):
+        f.unlink()
     for f in conc_dir.glob('*.*'):
+        f.unlink()
+    for f in skrt_conc_dir.glob('*.*'):
         f.unlink()
 
     tokens_per_type_in_report = 20
@@ -217,5 +252,4 @@ if __name__ == '__main__':
     structure = mark_skrt(structure)
     report = generate_report(structure, tokens_per_type_in_report)
     Path('output/report.txt').write_text(report, encoding='utf-8-sig')
-    generate_examples(structure, error_tokens_dir, conc_dir, tokens_per_type_in_total, 1, 1)
-    print()
+    generate_examples(structure, error_tokens_dir, skrt_error_tokens_dir, conc_dir, skrt_conc_dir, tokens_per_type_in_total, 1, 1, gen_skrt=False)
