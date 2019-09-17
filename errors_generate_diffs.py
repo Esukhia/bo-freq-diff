@@ -4,28 +4,28 @@ import datetime
 import re
 
 from bo_freq_diff import SegmentDiff, SentenceOrderedDiff
-from pybo import BoTokenizer, Token, PyBoChunk
-from textunits import sentencify
+from pybo import WordTokenizer, Token, Chunks, sentence_tokenizer
+from pybo import ChunkMarkers as cm
 
 rpl_start, rpl_middle, rpl_end = '{~~', '~>', '~~}'
 del_start, del_end = '{--', '--}'
 pls_start, pls_end = '{++', '++}'
 marks = [rpl_start, rpl_middle, rpl_end, del_start, del_end, pls_start, pls_end]
-tok = BoTokenizer('GMD', ignore_chars=['\n'])
+tok = WordTokenizer('GMD', ignore_chars=['\n'])
 
 
-class BoNonboChunk(PyBoChunk):
+class BoNonboChunk(Chunks):
     def __init__(self, string):
         super().__init__(string, ignore_chars=['\n'])
 
-    def chunk(self, indices=True, gen=False):
+    def bo_chunk(self):
         return self.chunk_bo_chars()
 
     def get_cleaned_bo(self):
-        chunks = self.chunk()
+        chunks = self.bo_chunk()
         chunks = self.get_chunked(chunks)
-        has_bo = True if self.BO_MARKER in [a[0] for a in chunks] else False
-        chunks = [b for a, b in chunks if a == self.BO_MARKER]
+        has_bo = True if cm.BO.value in [a[0] for a in chunks] else False
+        chunks = [b for a, b in chunks if a == cm.BO.value]
         return ''.join(chunks).strip(), has_bo
 
 
@@ -82,38 +82,38 @@ def join_diffs(tokens):
             print()
         cur = tokens[i]
         diff = ''
-        if '{' in cur.content and cur.content.count('{') != cur.content.count('}'):
+        if '{' in cur.text and cur.text.count('{') != cur.text.count('}'):
             j = 0
 
             cur = tokens[i + j]
-            diff += cur.content
+            diff += cur.text
             j += 1
             while diff.count('{') != diff.count('}'):
                 cur = tokens[i + j]
-                diff += cur.content
+                diff += cur.text
                 j += 1
             new_tokens = []
             for n in diff.split('}'):
                 new = Token()
                 if n and '{' in n:
-                    new.content = n + '}'
+                    new.text = n + '}'
                 else:
-                    new.content = n
+                    new.text = n
                 new_tokens.append(new)
             tokens[i: i + j] = new_tokens
 
         i += 1
 
     for num, t in enumerate(tokens):
-        if t.content.count('{') != t.content.count('}'):
-            print(num, t.content)
+        if t.text.count('{') != t.text.count('}'):
+            print(num, t.text)
 
     return tokens
 
 
 def space_sep_tokens(string):
     tokens = tok.tokenize(string)
-    tokens = [t.content.replace(' ', '_') for t in tokens]
+    tokens = [t.text.replace(' ', '_') for t in tokens]
     return ' '.join(tokens)
 
 
@@ -168,8 +168,8 @@ def prepare_dataset(filename1, filename2, outdir):
 
     tokens = tok.tokenize(joined)
     tokens = join_diffs(tokens)
-    sentences = sentencify(tokens)
-    sentences = [[s.content for s in sent] for l, sent in sentences]  # extract strings from sentence tokens
+    sentences = sentence_tokenizer(tokens)
+    sentences = [[s.text for s in sent] for l, sent in sentences]  # extract strings from sentence tokens
 
     # sentence_pairs = [gen_sent_pair(sent) for sent in sentences]
     sentence_pairs = []

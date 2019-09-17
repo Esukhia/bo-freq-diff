@@ -1,11 +1,11 @@
 from .dmp import DMP
-from pybo import PyBoChunk
+from pybo import Chunks
 
 
 def syllabify(string):
-    pybochunk = PyBoChunk(string)
-    chunks = pybochunk.chunk()
-    chunks = pybochunk.get_chunked(chunks)
+    c = Chunks(string)
+    chunks = c.make_chunks()
+    chunks = c.get_chunked(chunks)
     return ' '.join([c[1] for c in chunks])
 
 
